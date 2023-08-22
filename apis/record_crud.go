@@ -79,6 +79,8 @@ func (api *recordApi) list(c echo.Context) error {
 		return NewBadRequestError("Invalid filter parameters.", err)
 	}
 
+	c.Set("_expand_sort", searchProvider.ExpandSort)
+
 	event := new(core.RecordsListEvent)
 	event.HttpContext = c
 	event.Collection = collection

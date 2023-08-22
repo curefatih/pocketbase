@@ -229,6 +229,50 @@ func (dao *Dao) FindRecordsByExpr(collectionNameOrId string, exprs ...dbx.Expres
 	return records, nil
 }
 
+// This function is just a copy paste from others. It should be refactored
+func (dao *Dao) FindRecordsByExprAndFilter(collectionNameOrId string, exprs []dbx.Expression, sortFields []search.SortField) ([]*models.Record, error) {
+	collection, err := dao.FindCollectionByNameOrId(collectionNameOrId)
+	if err != nil {
+		return nil, err
+	}
+
+	query := dao.RecordQuery(collection)
+
+	// add only the non-nil expressions
+	for _, expr := range exprs {
+		if expr != nil {
+			query.AndWhere(expr)
+		}
+	}
+
+	// build a fields resolver and attach the generated conditions to the query
+	// ---
+	resolver := resolvers.NewRecordFieldResolver(
+		dao,
+		collection, // the base collection
+		nil,        // no request data
+		true,       // allow searching hidden/protected fields like "email"
+	)
+
+	for _, sortField := range sortFields {
+		expr, err := sortField.BuildExpr(resolver)
+		if err != nil {
+			return nil, err
+		}
+		if expr != "" {
+			query.AndOrderBy(expr)
+		}
+	}
+
+	var records []*models.Record
+
+	if err := query.All(&records); err != nil {
+		return nil, err
+	}
+
+	return records, nil
+}
+
 // FindFirstRecordByData returns the first found record matching
 // the provided key-value pair.
 func (dao *Dao) FindFirstRecordByData(

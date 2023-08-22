@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"net/url"
+	"regexp"
 	"strconv"
 
 	"github.com/pocketbase/dbx"
@@ -44,6 +45,7 @@ type Provider struct {
 	perPage       int
 	sort          []SortField
 	filter        []FilterData
+	ExpandSort    []SortField
 }
 
 // NewProvider creates and returns a new search provider.
@@ -65,6 +67,7 @@ func NewProvider(fieldResolver FieldResolver) *Provider {
 		perPage:       DefaultPerPage,
 		sort:          []SortField{},
 		filter:        []FilterData{},
+		ExpandSort:    []SortField{},
 	}
 }
 
@@ -114,6 +117,12 @@ func (s *Provider) Sort(sort []SortField) *Provider {
 // AddSort appends the provided SortField to the existing provider's sort field.
 func (s *Provider) AddSort(field SortField) *Provider {
 	s.sort = append(s.sort, field)
+	return s
+}
+
+// AddSort appends the provided SortField to the existing provider's sort field.
+func (s *Provider) AddExpandSort(field SortField) *Provider {
+	s.ExpandSort = append(s.ExpandSort, field)
 	return s
 }
 
@@ -168,8 +177,16 @@ func (s *Provider) Parse(urlQuery string) error {
 	}
 
 	if raw := params.Get(SortQueryParam); raw != "" {
+		// +relation(field).another_field or -relation(field).another_field
+		var indirectExpandRegex = regexp.MustCompile(`(\w+)\((\w+)\)\.(\w+)`)
 		for _, sortField := range ParseSortFromString(raw) {
-			s.AddSort(sortField)
+			// if the field as  indirect relation pattern then skip it. pattern is "relation(field)"
+			if indirectExpandRegex.MatchString(sortField.Name) {
+				s.AddExpandSort(sortField)
+			} else {
+				s.AddSort(sortField)
+			}
+
 		}
 	}
 

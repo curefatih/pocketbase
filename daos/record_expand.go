@@ -11,6 +11,7 @@ import (
 	"github.com/pocketbase/pocketbase/tools/dbutils"
 	"github.com/pocketbase/pocketbase/tools/inflector"
 	"github.com/pocketbase/pocketbase/tools/list"
+	"github.com/pocketbase/pocketbase/tools/search"
 	"github.com/pocketbase/pocketbase/tools/security"
 	"github.com/pocketbase/pocketbase/tools/types"
 )
@@ -27,8 +28,8 @@ type ExpandFetchFunc func(relCollection *models.Collection, relIds []string) ([]
 // that returns all relation records.
 //
 // Returns a map with the failed expand parameters and their errors.
-func (dao *Dao) ExpandRecord(record *models.Record, expands []string, optFetchFunc ExpandFetchFunc) map[string]error {
-	return dao.ExpandRecords([]*models.Record{record}, expands, optFetchFunc)
+func (dao *Dao) ExpandRecord(record *models.Record, expands []string, optFetchFunc ExpandFetchFunc, sortOptions map[string][]search.SortField) map[string]error {
+	return dao.ExpandRecords([]*models.Record{record}, expands, optFetchFunc, sortOptions)
 }
 
 // ExpandRecords expands the relations of the provided Record models list.
@@ -37,13 +38,13 @@ func (dao *Dao) ExpandRecord(record *models.Record, expands []string, optFetchFu
 // that returns all relation records.
 //
 // Returns a map with the failed expand parameters and their errors.
-func (dao *Dao) ExpandRecords(records []*models.Record, expands []string, optFetchFunc ExpandFetchFunc) map[string]error {
+func (dao *Dao) ExpandRecords(records []*models.Record, expands []string, optFetchFunc ExpandFetchFunc, sortOptions map[string][]search.SortField) map[string]error {
 	normalized := normalizeExpands(expands)
 
 	failed := map[string]error{}
 
 	for _, expand := range normalized {
-		if err := dao.expandRecords(records, expand, optFetchFunc, 1); err != nil {
+		if err := dao.expandRecords(records, expand, optFetchFunc, 1, sortOptions); err != nil {
 			failed[expand] = err
 		}
 	}
@@ -58,7 +59,7 @@ var indirectExpandRegex = regexp.MustCompile(`^(\w+)\((\w+)\)$`)
 // - all records are expected to be from the same collection
 // - if MaxExpandDepth is reached, the function returns nil ignoring the remaining expand path
 // - indirect expands are supported only with single relation fields
-func (dao *Dao) expandRecords(records []*models.Record, expandPath string, fetchFunc ExpandFetchFunc, recursionLevel int) error {
+func (dao *Dao) expandRecords(records []*models.Record, expandPath string, fetchFunc ExpandFetchFunc, recursionLevel int, sortOptions map[string][]search.SortField) error {
 	if fetchFunc == nil {
 		// load a default fetchFunc
 		fetchFunc = func(relCollection *models.Collection, relIds []string) ([]*models.Record, error) {
@@ -106,11 +107,14 @@ func (dao *Dao) expandRecords(records []*models.Record, expandPath string, fetch
 			recordIds[i] = record.Id
 		}
 
+		sortFields := sortOptions[parts[0]]
+
 		// @todo after the index optimizations consider allowing
 		// indirect expand for multi-relation fields
-		indirectRecords, err := dao.FindRecordsByExpr(
+		indirectRecords, err := dao.FindRecordsByExprAndFilter(
 			indirectRel.Id,
-			dbx.In(inflector.Columnify(matches[2]), recordIds...),
+			[]dbx.Expression{dbx.In(inflector.Columnify(matches[2]), recordIds...)},
+			sortFields,
 		)
 		if err != nil {
 			return err
@@ -180,7 +184,7 @@ func (dao *Dao) expandRecords(records []*models.Record, expandPath string, fetch
 
 	// expand nested fields
 	if len(parts) > 1 {
-		err := dao.expandRecords(rels, parts[1], fetchFunc, recursionLevel+1)
+		err := dao.expandRecords(rels, parts[1], fetchFunc, recursionLevel+1, sortOptions)
 		if err != nil {
 			return err
 		}

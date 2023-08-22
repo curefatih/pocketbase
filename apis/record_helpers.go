@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/labstack/echo/v5"
@@ -103,6 +104,7 @@ func RecordAuthResponse(
 				e.Record,
 				expands,
 				expandFetch(app.Dao(), &requestInfo),
+				map[string][]search.SortField{},
 			)
 			if len(failed) > 0 && app.IsDebug() {
 				log.Println("Failed to expand relations: ", failed)
@@ -155,7 +157,25 @@ func EnrichRecords(c echo.Context, dao *daos.Dao, records []*models.Record, defa
 		return nil // nothing to expand
 	}
 
-	errs := dao.ExpandRecords(records, expands, expandFetch(dao, requestInfo))
+	sort := c.Get("_expand_sort").([]search.SortField)
+	// split the sort param from the expand paths
+	sortOptions := map[string][]search.SortField{}
+
+	var indirectExpandRegex = regexp.MustCompile(`^(\w+)\((\w+)\)$`)
+	for _, field := range sort {
+		if strings.Contains(field.Name, ".") {
+			parts := strings.Split(field.Name, ".")
+			name := strings.Join(parts[:len(parts)-1], ".")
+			if matches := indirectExpandRegex.FindStringSubmatch(name); len(matches) == 3 {
+				if _, ok := sortOptions[name]; !ok {
+					sortOptions[name] = []search.SortField{}
+				}
+				sortOptions[name] = append(sortOptions[name], search.SortField{Name: parts[len(parts)-1], Direction: field.Direction})
+			}
+		}
+
+	}
+	errs := dao.ExpandRecords(records, expands, expandFetch(dao, requestInfo), sortOptions)
 	if len(errs) > 0 {
 		return fmt.Errorf("Failed to expand: %v", errs)
 	}
