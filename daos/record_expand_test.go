@@ -11,6 +11,7 @@ import (
 	"github.com/pocketbase/pocketbase/models/schema"
 	"github.com/pocketbase/pocketbase/tests"
 	"github.com/pocketbase/pocketbase/tools/list"
+	"github.com/pocketbase/pocketbase/tools/search"
 )
 
 func TestExpandRecords(t *testing.T) {
@@ -205,7 +206,7 @@ func TestExpandRecords(t *testing.T) {
 	for _, s := range scenarios {
 		ids := list.ToUniqueStringSlice(s.recordIds)
 		records, _ := app.Dao().FindRecordsByIds(s.collectionIdOrName, ids)
-		failed := app.Dao().ExpandRecords(records, s.expands, s.fetchFunc)
+		failed := app.Dao().ExpandRecords(records, s.expands, s.fetchFunc, map[string][]search.SortField{})
 
 		if len(failed) != s.expectExpandFailures {
 			t.Errorf("[%s] Expected %d failures, got %d: \n%v", s.testName, s.expectExpandFailures, len(failed), failed)
@@ -355,7 +356,7 @@ func TestExpandRecord(t *testing.T) {
 
 	for _, s := range scenarios {
 		record, _ := app.Dao().FindRecordById(s.collectionIdOrName, s.recordId)
-		failed := app.Dao().ExpandRecord(record, s.expands, s.fetchFunc)
+		failed := app.Dao().ExpandRecord(record, s.expands, s.fetchFunc, map[string][]search.SortField{})
 
 		if len(failed) != s.expectExpandFailures {
 			t.Errorf("[%s] Expected %d failures, got %d: \n%v", s.testName, s.expectExpandFailures, len(failed), failed)
@@ -384,7 +385,7 @@ func TestIndirectExpandSingeVsArrayResult(t *testing.T) {
 	{
 		errs := app.Dao().ExpandRecord(record, []string{"demo4(rel_one_cascade)"}, func(c *models.Collection, ids []string) ([]*models.Record, error) {
 			return app.Dao().FindRecordsByIds(c.Id, ids, nil)
-		})
+		}, map[string][]search.SortField{})
 		if len(errs) > 0 {
 			t.Fatal(errs)
 		}
@@ -413,7 +414,7 @@ func TestIndirectExpandSingeVsArrayResult(t *testing.T) {
 	{
 		errs := app.Dao().ExpandRecord(record, []string{"demo4(rel_one_cascade)"}, func(c *models.Collection, ids []string) ([]*models.Record, error) {
 			return app.Dao().FindRecordsByIds(c.Id, ids, nil)
-		})
+		}, map[string][]search.SortField{})
 		if len(errs) > 0 {
 			t.Fatal(errs)
 		}

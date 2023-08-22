@@ -173,7 +173,6 @@ func EnrichRecords(c echo.Context, dao *daos.Dao, records []*models.Record, defa
 				sortOptions[name] = append(sortOptions[name], search.SortField{Name: parts[len(parts)-1], Direction: field.Direction})
 			}
 		}
-
 	}
 	errs := dao.ExpandRecords(records, expands, expandFetch(dao, requestInfo), sortOptions)
 	if len(errs) > 0 {

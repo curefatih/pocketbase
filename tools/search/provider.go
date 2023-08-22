@@ -186,7 +186,6 @@ func (s *Provider) Parse(urlQuery string) error {
 			} else {
 				s.AddSort(sortField)
 			}
-
 		}
 	}
 
